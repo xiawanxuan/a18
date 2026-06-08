@@ -1,13 +1,9 @@
 {
-    "name": "SoftFluidPuzzle.LevelManagement",
-    "rootNamespace": "SoftFluidPuzzle.LevelManagement",
+    "name": "SoftFluidPuzzle.PressureMechanisms",
+    "rootNamespace": "SoftFluidPuzzle.PressureMechanisms",
     "references": [
         "SoftFluidPuzzle.Core",
-        "SoftFluidPuzzle.PhysicsSimulation",
-        "SoftFluidPuzzle.FluidRendering",
-        "SoftFluidPuzzle.PlayerControl",
-        "SoftFluidPuzzle.DestructibleObjects",
-        "SoftFluidPuzzle.PressureMechanisms"
+        "SoftFluidPuzzle.FluidRendering"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

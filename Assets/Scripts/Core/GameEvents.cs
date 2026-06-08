@@ -12,6 +12,19 @@ namespace SoftFluidPuzzle.Core
         public const string OnPuzzleSolved = "OnPuzzleSolved";
         public const string OnSaveDataLoaded = "OnSaveDataLoaded";
         public const string OnSaveDataSaved = "OnSaveDataSaved";
+
+        public const string OnObjectDestroyed = "OnObjectDestroyed";
+        public const string OnPressureTriggered = "OnPressureTriggered";
+        public const string OnMechanismActivated = "OnMechanismActivated";
+
+        public const string OnEditorModeChanged = "OnEditorModeChanged";
+        public const string OnObjectSelected = "OnObjectSelected";
+        public const string OnObjectPlaced = "OnObjectPlaced";
+        public const string OnObjectDeleted = "OnObjectDeleted";
+        public const string OnToolChanged = "OnToolChanged";
+        public const string OnLevelSaved = "OnLevelSaved";
+        public const string OnLevelLoaded = "OnLevelLoaded";
+        public const string OnNewLevelCreated = "OnNewLevelCreated";
     }
 
     public struct LevelCompleteArgs
