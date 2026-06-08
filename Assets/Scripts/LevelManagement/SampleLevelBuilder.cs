@@ -115,15 +115,18 @@ namespace SoftFluidPuzzle.LevelManagement
         private void CreateSoftBodies()
         {
             GameObject softBodyObj = new GameObject("SoftBody_Cube");
-            softBodyObj.transform.position = new Vector3(-5f, 3f, 0f);
+            softBodyObj.transform.position = new Vector3(-5f, 4f, 0f);
 
             SoftBody softBody = softBodyObj.AddComponent<SoftBody>();
             softBody.resolution = 6;
-            softBody.radius = 1.5f;
-            softBody.stiffness = 150f;
-            softBody.damping = 3f;
-            softBody.pressure = 30f;
-            softBody.gravityScale = 0.8f;
+            softBody.size = 2.5f;
+            softBody.massPerParticle = 0.3f;
+            softBody.structuralStiffness = 60f;
+            softBody.shearStiffness = 30f;
+            softBody.bendStiffness = 15f;
+            softBody.springDamping = 0.5f;
+            softBody.volumeConservation = 80f;
+            softBody.gravityScale = 1f;
             softBody.collisionLayers = LayerMask.GetMask("Default");
 
             MeshRenderer renderer = softBodyObj.GetComponent<MeshRenderer>();
@@ -164,8 +167,10 @@ namespace SoftFluidPuzzle.LevelManagement
 
             FluidRenderer renderer = fluidObj.AddComponent<FluidRenderer>();
             renderer.fluidSystem = fluidSystem;
-            renderer.particleSize = 1.5f;
-            renderer.particleColor = new Color(0.2f, 0.5f, 1f, 0.8f);
+            renderer.particleSize = 1.8f;
+            renderer.particleColor = new Color(0.2f, 0.5f, 1f, 0.7f);
+            renderer.billboard = true;
+            renderer.glowIntensity = 0.3f;
 
             if (fluidMaterial != null)
             {
@@ -173,9 +178,14 @@ namespace SoftFluidPuzzle.LevelManagement
             }
             else
             {
-                Material mat = new Material(Shader.Find("Particles/Standard Unlit"));
-                mat.color = new Color(0.2f, 0.5f, 1f, 0.8f);
-                mat.SetFloat("_Mode", 3);
+                Shader fluidShader = Shader.Find("Fluid/FluidParticle");
+                if (fluidShader == null)
+                {
+                    fluidShader = Shader.Find("Particles/Alpha Blended Premultiply");
+                }
+                Material mat = new Material(fluidShader);
+                mat.color = new Color(0.2f, 0.5f, 1f, 0.7f);
+                mat.SetFloat("_GlowIntensity", 0.3f);
                 renderer.particleMaterial = mat;
             }
 

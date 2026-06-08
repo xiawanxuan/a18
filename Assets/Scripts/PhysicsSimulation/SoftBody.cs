@@ -8,13 +8,17 @@ namespace SoftFluidPuzzle.PhysicsSimulation
     public class SoftBody : MonoBehaviour
     {
         [Header("Soft Body Settings")]
-        public int resolution = 10;
-        public float radius = 1f;
-        public float massPerParticle = 1f;
-        public float particleRadius = 0.3f;
-        public float stiffness = 100f;
-        public float damping = 2f;
-        public float pressure = 50f;
+        public int resolution = 8;
+        public float size = 2f;
+        public float massPerParticle = 0.5f;
+        public float particleRadius = 0.25f;
+
+        [Header("Spring Settings")]
+        public float structuralStiffness = 80f;
+        public float shearStiffness = 40f;
+        public float bendStiffness = 20f;
+        public float springDamping = 0.8f;
+        public float volumeConservation = 50f;
 
         [Header("Gravity")]
         public float gravityScale = 1f;
@@ -25,15 +29,15 @@ namespace SoftFluidPuzzle.PhysicsSimulation
         [Header("Rendering")]
         public bool updateMesh = true;
 
-        private SoftBodyParticle[] _particles;
-        private SoftBodySpring[] _springs;
+        private SoftBodyParticle[,,] _particleGrid;
+        private List<SoftBodyParticle> _particles;
+        private List<SoftBodySpring> _springs;
         private Mesh _mesh;
-        private Vector3[] _originalVertices;
-        private int[] _triangles;
         private bool _isInitialized = false;
+        private float _initialVolume;
 
-        public SoftBodyParticle[] Particles => _particles;
-        public SoftBodySpring[] Springs => _springs;
+        public List<SoftBodyParticle> Particles => _particles;
+        public List<SoftBodySpring> Springs => _springs;
 
         private void Start()
         {
@@ -44,44 +48,34 @@ namespace SoftFluidPuzzle.PhysicsSimulation
         {
             if (_isInitialized) return;
 
-            GenerateParticles();
-            GenerateSprings();
+            GenerateParticleGrid();
+            GenerateAllSprings();
+            CalculateInitialVolume();
             InitializeMesh();
 
             _isInitialized = true;
         }
 
-        private void GenerateParticles()
+        private void GenerateParticleGrid()
         {
-            int totalParticles = resolution * resolution * 6;
-            _particles = new SoftBodyParticle[totalParticles];
+            _particleGrid = new SoftBodyParticle[resolution, resolution, resolution];
+            _particles = new List<SoftBodyParticle>();
+
+            float halfSize = size * 0.5f;
+            float step = size / (resolution - 1);
 
             int index = 0;
-            float halfRes = (resolution - 1) * 0.5f;
-
-            Vector3[] faceDirections = {
-                Vector3.forward, Vector3.back,
-                Vector3.right, Vector3.left,
-                Vector3.up, Vector3.down
-            };
-
-            foreach (Vector3 faceDir in faceDirections)
+            for (int x = 0; x < resolution; x++)
             {
-                Vector3 uAxis, vAxis;
-                GetFaceAxes(faceDir, out uAxis, out vAxis);
-
-                for (int u = 0; u < resolution; u++)
+                for (int y = 0; y < resolution; y++)
                 {
-                    for (int v = 0; v < resolution; v++)
+                    for (int z = 0; z < resolution; z++)
                     {
-                        float uNorm = (u - halfRes) / halfRes;
-                        float vNorm = (v - halfRes) / halfRes;
-
-                        Vector3 localPos = faceDir * radius +
-                                          uAxis * uNorm * radius +
-                                          vAxis * vNorm * radius;
-
-                        localPos = localPos.normalized * radius;
+                        Vector3 localPos = new Vector3(
+                            -halfSize + x * step,
+                            -halfSize + y * step,
+                            -halfSize + z * step
+                        );
 
                         GameObject particleObj = new GameObject("Particle_" + index);
                         particleObj.transform.SetParent(transform, false);
@@ -92,81 +86,107 @@ namespace SoftFluidPuzzle.PhysicsSimulation
                         particle.radius = particleRadius;
                         particle.gravityScale = gravityScale;
                         particle.collisionLayers = collisionLayers;
+                        particle.drag = 0.01f;
 
-                        _particles[index] = particle;
+                        _particleGrid[x, y, z] = particle;
+                        _particles.Add(particle);
                         index++;
                     }
                 }
             }
         }
 
-        private void GetFaceAxes(Vector3 faceDir, out Vector3 uAxis, out Vector3 vAxis)
+        private void GenerateAllSprings()
         {
-            if (faceDir == Vector3.forward || faceDir == Vector3.back)
-            {
-                uAxis = Vector3.right;
-                vAxis = Vector3.up;
-            }
-            else if (faceDir == Vector3.right || faceDir == Vector3.left)
-            {
-                uAxis = Vector3.forward;
-                vAxis = Vector3.up;
-            }
-            else
-            {
-                uAxis = Vector3.right;
-                vAxis = Vector3.forward;
-            }
+            _springs = new List<SoftBodySpring>();
+
+            GenerateStructuralSprings();
+            GenerateShearSprings();
+            GenerateBendSprings();
         }
 
-        private void GenerateSprings()
+        private void GenerateStructuralSprings()
         {
-            List<SoftBodySpring> springList = new List<SoftBodySpring>();
-            int particlesPerFace = resolution * resolution;
-
-            for (int face = 0; face < 6; face++)
+            for (int x = 0; x < resolution; x++)
             {
-                int faceStart = face * particlesPerFace;
-
-                for (int u = 0; u < resolution; u++)
+                for (int y = 0; y < resolution; y++)
                 {
-                    for (int v = 0; v < resolution; v++)
+                    for (int z = 0; z < resolution; z++)
                     {
-                        int idx = faceStart + u * resolution + v;
+                        SoftBodyParticle current = _particleGrid[x, y, z];
 
-                        if (u < resolution - 1)
-                        {
-                            int nextIdx = faceStart + (u + 1) * resolution + v;
-                            CreateSpring(_particles[idx], _particles[nextIdx], springList);
-                        }
+                        if (x < resolution - 1)
+                            CreateSpring(current, _particleGrid[x + 1, y, z], structuralStiffness, springDamping);
 
-                        if (v < resolution - 1)
-                        {
-                            int nextIdx = faceStart + u * resolution + (v + 1);
-                            CreateSpring(_particles[idx], _particles[nextIdx], springList);
-                        }
+                        if (y < resolution - 1)
+                            CreateSpring(current, _particleGrid[x, y + 1, z], structuralStiffness, springDamping);
 
-                        if (u < resolution - 1 && v < resolution - 1)
-                        {
-                            int diagIdx = faceStart + (u + 1) * resolution + (v + 1);
-                            CreateSpring(_particles[idx], _particles[diagIdx], springList);
-                        }
-
-                        if (u < resolution - 1 && v > 0)
-                        {
-                            int diagIdx = faceStart + (u + 1) * resolution + (v - 1);
-                            CreateSpring(_particles[idx], _particles[diagIdx], springList);
-                        }
+                        if (z < resolution - 1)
+                            CreateSpring(current, _particleGrid[x, y, z + 1], structuralStiffness, springDamping);
                     }
                 }
             }
-
-            ConnectAdjacentFaces(springList);
-
-            _springs = springList.ToArray();
         }
 
-        private void CreateSpring(SoftBodyParticle a, SoftBodyParticle b, List<SoftBodySpring> springList)
+        private void GenerateShearSprings()
+        {
+            for (int x = 0; x < resolution - 1; x++)
+            {
+                for (int y = 0; y < resolution - 1; y++)
+                {
+                    for (int z = 0; z < resolution - 1; z++)
+                    {
+                        SoftBodyParticle p000 = _particleGrid[x, y, z];
+                        SoftBodyParticle p110 = _particleGrid[x + 1, y + 1, z];
+                        SoftBodyParticle p101 = _particleGrid[x + 1, y, z + 1];
+                        SoftBodyParticle p011 = _particleGrid[x, y + 1, z + 1];
+
+                        SoftBodyParticle p100 = _particleGrid[x + 1, y, z];
+                        SoftBodyParticle p010 = _particleGrid[x, y + 1, z];
+                        SoftBodyParticle p001 = _particleGrid[x, y, z + 1];
+                        SoftBodyParticle p111 = _particleGrid[x + 1, y + 1, z + 1];
+
+                        CreateSpring(p000, p110, shearStiffness, springDamping);
+                        CreateSpring(p100, p010, shearStiffness, springDamping);
+                        CreateSpring(p000, p101, shearStiffness, springDamping);
+                        CreateSpring(p100, p001, shearStiffness, springDamping);
+                        CreateSpring(p000, p011, shearStiffness, springDamping);
+                        CreateSpring(p010, p001, shearStiffness, springDamping);
+                        CreateSpring(p110, p101, shearStiffness, springDamping);
+                        CreateSpring(p110, p011, shearStiffness, springDamping);
+                        CreateSpring(p101, p011, shearStiffness, springDamping);
+                        CreateSpring(p111, p100, shearStiffness, springDamping);
+                        CreateSpring(p111, p010, shearStiffness, springDamping);
+                        CreateSpring(p111, p001, shearStiffness, springDamping);
+                    }
+                }
+            }
+        }
+
+        private void GenerateBendSprings()
+        {
+            for (int x = 0; x < resolution; x++)
+            {
+                for (int y = 0; y < resolution; y++)
+                {
+                    for (int z = 0; z < resolution; z++)
+                    {
+                        SoftBodyParticle current = _particleGrid[x, y, z];
+
+                        if (x < resolution - 2)
+                            CreateSpring(current, _particleGrid[x + 2, y, z], bendStiffness, springDamping);
+
+                        if (y < resolution - 2)
+                            CreateSpring(current, _particleGrid[x, y + 2, z], bendStiffness, springDamping);
+
+                        if (z < resolution - 2)
+                            CreateSpring(current, _particleGrid[x, y, z + 2], bendStiffness, springDamping);
+                    }
+                }
+            }
+        }
+
+        private void CreateSpring(SoftBodyParticle a, SoftBodyParticle b, float stiffness, float damping)
         {
             if (a == null || b == null) return;
 
@@ -180,39 +200,28 @@ namespace SoftFluidPuzzle.PhysicsSimulation
             spring.stiffness = stiffness;
             spring.damping = damping;
 
-            springList.Add(spring);
+            _springs.Add(spring);
         }
 
-        private void ConnectAdjacentFaces(List<SoftBodySpring> springList)
+        private void CalculateInitialVolume()
         {
-            int p = particlesPerFace;
-            int r = resolution;
+            _initialVolume = 0f;
 
-            for (int i = 0; i < resolution; i++)
+            for (int x = 0; x < resolution - 1; x++)
             {
-                int frontRight = 0 * p + i * r + (r - 1);
-                int rightFront = 2 * p + i * r + 0;
-                if (_particles[frontRight] != null && _particles[rightFront] != null)
-                    CreateSpring(_particles[frontRight], _particles[rightFront], springList);
+                for (int y = 0; y < resolution - 1; y++)
+                {
+                    for (int z = 0; z < resolution - 1; z++)
+                    {
+                        Vector3 p0 = _particleGrid[x, y, z].Position;
+                        Vector3 p1 = _particleGrid[x + 1, y + 1, z + 1].Position;
 
-                int rightBack = 2 * p + i * r + (r - 1);
-                int backRight = 1 * p + i * r + 0;
-                if (_particles[rightBack] != null && _particles[backRight] != null)
-                    CreateSpring(_particles[rightBack], _particles[backRight], springList);
-
-                int topFront = 4 * p + (r - 1) * r + i;
-                int frontTop = 0 * p + (r - 1) * r + i;
-                if (_particles[topFront] != null && _particles[frontTop] != null)
-                    CreateSpring(_particles[topFront], _particles[frontTop], springList);
-
-                int topRight = 4 * p + i * r + (r - 1);
-                int rightTop = 2 * p + (r - 1) * r + i;
-                if (_particles[topRight] != null && _particles[rightTop] != null)
-                    CreateSpring(_particles[topRight], _particles[rightTop], springList);
+                        float cellVolume = Mathf.Abs((p1.x - p0.x) * (p1.y - p0.y) * (p1.z - p0.z));
+                        _initialVolume += cellVolume;
+                    }
+                }
             }
         }
-
-        private int particlesPerFace => resolution * resolution;
 
         private void InitializeMesh()
         {
@@ -220,50 +229,73 @@ namespace SoftFluidPuzzle.PhysicsSimulation
             _mesh = new Mesh();
             _mesh.name = "SoftBodyMesh";
 
+            GenerateSurfaceMesh();
+
+            meshFilter.mesh = _mesh;
+        }
+
+        private void GenerateSurfaceMesh()
+        {
             List<Vector3> vertices = new List<Vector3>();
             List<int> triangles = new List<int>();
-            int p = particlesPerFace;
-            int r = resolution;
+            List<Vector3> normals = new List<Vector3>();
 
             for (int face = 0; face < 6; face++)
             {
-                int faceStart = face * p;
+                Vector3 normal = Vector3.zero;
+                int lastIndex = vertices.Count;
 
-                for (int u = 0; u < r - 1; u++)
+                switch (face)
                 {
-                    for (int v = 0; v < r - 1; v++)
+                    case 0: normal = Vector3.forward; break;
+                    case 1: normal = Vector3.back; break;
+                    case 2: normal = Vector3.right; break;
+                    case 3: normal = Vector3.left; break;
+                    case 4: normal = Vector3.up; break;
+                    case 5: normal = Vector3.down; break;
+                }
+
+                for (int u = 0; u < resolution - 1; u++)
+                {
+                    for (int v = 0; v < resolution - 1; v++)
                     {
-                        int idx0 = faceStart + u * r + v;
-                        int idx1 = faceStart + (u + 1) * r + v;
-                        int idx2 = faceStart + u * r + (v + 1);
-                        int idx3 = faceStart + (u + 1) * r + (v + 1);
+                        SoftBodyParticle p00 = GetSurfaceParticle(face, u, v);
+                        SoftBodyParticle p10 = GetSurfaceParticle(face, u + 1, v);
+                        SoftBodyParticle p01 = GetSurfaceParticle(face, u, v + 1);
+                        SoftBodyParticle p11 = GetSurfaceParticle(face, u + 1, v + 1);
 
-                        int vertStart = vertices.Count;
+                        if (p00 == null || p10 == null || p01 == null || p11 == null) continue;
 
-                        vertices.Add(_particles[idx0].Position - transform.position);
-                        vertices.Add(_particles[idx1].Position - transform.position);
-                        vertices.Add(_particles[idx2].Position - transform.position);
-                        vertices.Add(_particles[idx3].Position - transform.position);
+                        int idx0 = vertices.Count;
+                        vertices.Add(transform.InverseTransformPoint(p00.Position));
+                        vertices.Add(transform.InverseTransformPoint(p10.Position));
+                        vertices.Add(transform.InverseTransformPoint(p01.Position));
+                        vertices.Add(transform.InverseTransformPoint(p11.Position));
 
-                        bool reverseFace = face % 2 == 1;
+                        normals.Add(-normal);
+                        normals.Add(-normal);
+                        normals.Add(-normal);
+                        normals.Add(-normal);
 
-                        if (reverseFace)
+                        bool flip = face == 1 || face == 3 || face == 5;
+
+                        if (flip)
                         {
-                            triangles.Add(vertStart + 0);
-                            triangles.Add(vertStart + 2);
-                            triangles.Add(vertStart + 1);
-                            triangles.Add(vertStart + 1);
-                            triangles.Add(vertStart + 2);
-                            triangles.Add(vertStart + 3);
+                            triangles.Add(idx0 + 0);
+                            triangles.Add(idx0 + 2);
+                            triangles.Add(idx0 + 1);
+                            triangles.Add(idx0 + 1);
+                            triangles.Add(idx0 + 2);
+                            triangles.Add(idx0 + 3);
                         }
                         else
                         {
-                            triangles.Add(vertStart + 0);
-                            triangles.Add(vertStart + 1);
-                            triangles.Add(vertStart + 2);
-                            triangles.Add(vertStart + 1);
-                            triangles.Add(vertStart + 3);
-                            triangles.Add(vertStart + 2);
+                            triangles.Add(idx0 + 0);
+                            triangles.Add(idx0 + 1);
+                            triangles.Add(idx0 + 2);
+                            triangles.Add(idx0 + 1);
+                            triangles.Add(idx0 + 3);
+                            triangles.Add(idx0 + 2);
                         }
                     }
                 }
@@ -273,11 +305,22 @@ namespace SoftFluidPuzzle.PhysicsSimulation
             _mesh.triangles = triangles.ToArray();
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
+        }
 
-            _originalVertices = (Vector3[])_mesh.vertices.Clone();
-            _triangles = (int[])_mesh.triangles.Clone();
+        private SoftBodyParticle GetSurfaceParticle(int face, int u, int v)
+        {
+            int last = resolution - 1;
 
-            meshFilter.mesh = _mesh;
+            switch (face)
+            {
+                case 0: return _particleGrid[u, v, last];
+                case 1: return _particleGrid[last - u, v, 0];
+                case 2: return _particleGrid[last, u, v];
+                case 3: return _particleGrid[0, last - u, v];
+                case 4: return _particleGrid[u, last, v];
+                case 5: return _particleGrid[u, 0, last - v];
+                default: return null;
+            }
         }
 
         private void FixedUpdate()
@@ -296,38 +339,69 @@ namespace SoftFluidPuzzle.PhysicsSimulation
 
         private void SimulatePhysics(float deltaTime)
         {
-            foreach (SoftBodySpring spring in _springs)
+            int iterations = 3;
+            float subStep = deltaTime / iterations;
+
+            for (int iter = 0; iter < iterations; iter++)
             {
-                if (spring != null)
+                foreach (SoftBodySpring spring in _springs)
                 {
-                    spring.UpdateSpring(deltaTime);
+                    if (spring != null)
+                    {
+                        spring.UpdateSpring(subStep);
+                    }
                 }
-            }
 
-            ApplyPressure();
+                ApplyVolumeConservation();
 
-            foreach (SoftBodyParticle particle in _particles)
-            {
-                if (particle != null)
+                foreach (SoftBodyParticle particle in _particles)
                 {
-                    particle.UpdateParticle(deltaTime);
+                    if (particle != null)
+                    {
+                        particle.UpdateParticle(subStep);
+                    }
                 }
             }
         }
 
-        private void ApplyPressure()
+        private void ApplyVolumeConservation()
         {
-            if (pressure <= 0f) return;
+            if (volumeConservation <= 0f) return;
 
+            float currentVolume = CalculateCurrentVolume();
+            if (currentVolume <= 0f || _initialVolume <= 0f) return;
+
+            float volumeRatio = currentVolume / _initialVolume;
             Vector3 center = CalculateCenter();
+
+            float pressureForce = (1f - volumeRatio) * volumeConservation;
 
             foreach (SoftBodyParticle particle in _particles)
             {
                 if (particle == null || particle.IsStatic) continue;
 
                 Vector3 direction = (particle.Position - center).normalized;
-                particle.AddForce(direction * pressure);
+                if (direction.sqrMagnitude < 0.001f) continue;
+
+                particle.AddForce(direction * pressureForce * particle.mass);
             }
+        }
+
+        private float CalculateCurrentVolume()
+        {
+            if (_particles == null || _particles.Count == 0) return 0f;
+
+            Vector3 min = _particles[0].Position;
+            Vector3 max = _particles[0].Position;
+
+            foreach (SoftBodyParticle p in _particles)
+            {
+                if (p == null) continue;
+                min = Vector3.Min(min, p.Position);
+                max = Vector3.Max(max, p.Position);
+            }
+
+            return Mathf.Max(0f, (max.x - min.x) * (max.y - min.y) * (max.z - min.z));
         }
 
         public Vector3 CalculateCenter()
@@ -349,30 +423,28 @@ namespace SoftFluidPuzzle.PhysicsSimulation
 
         private void UpdateMesh()
         {
-            if (_mesh == null || _particles == null) return;
+            if (_mesh == null || _particleGrid == null) return;
 
             Vector3[] vertices = _mesh.vertices;
-            int p = particlesPerFace;
-            int r = resolution;
             int vertIndex = 0;
 
             for (int face = 0; face < 6; face++)
             {
-                int faceStart = face * p;
-
-                for (int u = 0; u < r - 1; u++)
+                for (int u = 0; u < resolution - 1; u++)
                 {
-                    for (int v = 0; v < r - 1; v++)
+                    for (int v = 0; v < resolution - 1; v++)
                     {
-                        int idx0 = faceStart + u * r + v;
-                        int idx1 = faceStart + (u + 1) * r + v;
-                        int idx2 = faceStart + u * r + (v + 1);
-                        int idx3 = faceStart + (u + 1) * r + (v + 1);
+                        SoftBodyParticle p00 = GetSurfaceParticle(face, u, v);
+                        SoftBodyParticle p10 = GetSurfaceParticle(face, u + 1, v);
+                        SoftBodyParticle p01 = GetSurfaceParticle(face, u, v + 1);
+                        SoftBodyParticle p11 = GetSurfaceParticle(face, u + 1, v + 1);
 
-                        vertices[vertIndex + 0] = transform.InverseTransformPoint(_particles[idx0].Position);
-                        vertices[vertIndex + 1] = transform.InverseTransformPoint(_particles[idx1].Position);
-                        vertices[vertIndex + 2] = transform.InverseTransformPoint(_particles[idx2].Position);
-                        vertices[vertIndex + 3] = transform.InverseTransformPoint(_particles[idx3].Position);
+                        if (p00 == null || p10 == null || p01 == null || p11 == null) continue;
+
+                        vertices[vertIndex + 0] = transform.InverseTransformPoint(p00.Position);
+                        vertices[vertIndex + 1] = transform.InverseTransformPoint(p10.Position);
+                        vertices[vertIndex + 2] = transform.InverseTransformPoint(p01.Position);
+                        vertices[vertIndex + 3] = transform.InverseTransformPoint(p11.Position);
 
                         vertIndex += 4;
                     }
@@ -414,7 +486,7 @@ namespace SoftFluidPuzzle.PhysicsSimulation
 
         public void SetParticleStatic(int index, bool isStatic)
         {
-            if (index >= 0 && index < _particles.Length && _particles[index] != null)
+            if (index >= 0 && index < _particles.Count && _particles[index] != null)
             {
                 _particles[index].SetStatic(isStatic);
             }
@@ -422,7 +494,7 @@ namespace SoftFluidPuzzle.PhysicsSimulation
 
         public void ResetSoftBody()
         {
-            for (int i = 0; i < _particles.Length; i++)
+            for (int i = 0; i < _particles.Count; i++)
             {
                 if (_particles[i] != null)
                 {
@@ -443,18 +515,18 @@ namespace SoftFluidPuzzle.PhysicsSimulation
         {
             if (_particles == null) return;
 
-            Gizmos.color = Color.cyan;
+            Gizmos.color = new Color(0f, 1f, 1f, 0.3f);
             foreach (SoftBodyParticle particle in _particles)
             {
                 if (particle != null)
                 {
-                    Gizmos.DrawWireSphere(particle.Position, particle.radius);
+                    Gizmos.DrawWireSphere(particle.Position, particle.radius * 0.5f);
                 }
             }
 
             if (_springs != null)
             {
-                Gizmos.color = Color.green;
+                Gizmos.color = new Color(0f, 1f, 0f, 0.15f);
                 foreach (SoftBodySpring spring in _springs)
                 {
                     if (spring != null && !spring.IsBroken && spring.particleA != null && spring.particleB != null)
