@@ -1,0 +1,17 @@
+{
+    "name": "SoftFluidPuzzle.FluidRendering",
+    "rootNamespace": "SoftFluidPuzzle.FluidRendering",
+    "references": [
+        "SoftFluidPuzzle.Core",
+        "SoftFluidPuzzle.PhysicsSimulation"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

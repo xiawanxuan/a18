@@ -1,0 +1,19 @@
+{
+    "name": "SoftFluidPuzzle.LevelManagement",
+    "rootNamespace": "SoftFluidPuzzle.LevelManagement",
+    "references": [
+        "SoftFluidPuzzle.Core",
+        "SoftFluidPuzzle.PhysicsSimulation",
+        "SoftFluidPuzzle.FluidRendering",
+        "SoftFluidPuzzle.PlayerControl"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

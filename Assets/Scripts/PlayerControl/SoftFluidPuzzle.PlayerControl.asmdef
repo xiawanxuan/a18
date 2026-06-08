@@ -1,0 +1,17 @@
+{
+    "name": "SoftFluidPuzzle.PlayerControl",
+    "rootNamespace": "SoftFluidPuzzle.PlayerControl",
+    "references": [
+        "SoftFluidPuzzle.Core",
+        "SoftFluidPuzzle.FluidRendering"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

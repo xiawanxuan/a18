@@ -1,0 +1,16 @@
+{
+    "name": "SoftFluidPuzzle.PhysicsSimulation",
+    "rootNamespace": "SoftFluidPuzzle.PhysicsSimulation",
+    "references": [
+        "SoftFluidPuzzle.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
